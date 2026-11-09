@@ -107,12 +107,22 @@ app.post('/calcular', (req, res) => {
 //   El parametro 'host' entra sin sanitizar a exec(). Un atacante puede enviar
 //   "8.8.8.8; cat /etc/passwd". Lo detectan CodeQL y Semgrep.
 //   CWE-78 (OS Command Injection)
+//app.get('/diagnostico', (req, res) => {
+//  const host = req.query.host || '127.0.0.1';
+//  exec('ping -c 1 ' + host, (err, stdout, stderr) => {
+//    res.json({ salida: stdout, error: stderr });
+//  });
+//});
+
+const { execFile } = require('child_process');
+
 app.get('/diagnostico', (req, res) => {
   const host = req.query.host || '127.0.0.1';
-  exec('ping -c 1 ' + host, (err, stdout, stderr) => {
-    res.json({ salida: stdout, error: stderr });
-  });
+  if (!/^[a-zA-Z0-9.-]{1,64}$/.test(host))
+    return res.status(400).json({ error: 'Host invalido' });
+  execFile('ping', ['-c', '1', host], (e, out) => res.json({ salida: out }));
 });
+
 
 if (require.main === module) {
   app.listen(config.PUERTO, () => {
