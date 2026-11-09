@@ -81,15 +81,27 @@ app.get('/buscar', (req, res) => {
 // [VULN-9] Uso de eval() sobre entrada del usuario: inyeccion de codigo.
 //   Lo detectan Semgrep y CodeQL (js/code-injection).
 //   CWE-95 (Eval Injection)
+//app.post('/calcular', (req, res) => {
+//  const expresion = req.body.expresion || '0';
+//  try {
+//    const resultado = eval(expresion);
+//    res.json({ resultado });
+//  } catch (e) {
+//    res.status(400).json({ error: 'Expresion invalida' });
+//  }
+//});
+
+//const { evaluate } = require('mathjs');
+
+// [FIX H-03] Se elimina eval(): ya no se evalua una expresion como codigo,
+//   se recibe un arreglo de numeros validado y se suma. CWE-95 remediado.
 app.post('/calcular', (req, res) => {
-  const expresion = req.body.expresion || '0';
-  try {
-    const resultado = eval(expresion);
-    res.json({ resultado });
-  } catch (e) {
-    res.status(400).json({ error: 'Expresion invalida' });
-  }
+  const nums = Array.isArray(req.body.numeros) ? req.body.numeros : [];
+  if (!nums.every(n => typeof n === 'number'))
+    return res.status(400).json({ error: 'Entrada invalida' });
+  res.json({ resultado: nums.reduce((a, b) => a + b, 0) });
 });
+
 
 // [VULN-10] Inyeccion de comandos del sistema operativo.
 //   El parametro 'host' entra sin sanitizar a exec(). Un atacante puede enviar
