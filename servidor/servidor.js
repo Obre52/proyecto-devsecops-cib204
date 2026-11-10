@@ -15,11 +15,13 @@
 
 const express = require('express');
 const cors = require('cors');
-const { exec } = require('child_process');
+//const { exec } = require('child_process');
 const cifrado = require('./cifrado');
 const db = require('./db');
 const config = require('./config');
 const { requiereAuth } = require('./auth');
+const rateLimit = require('express-rate-limit');
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
 
 const app = express();
 app.use(express.json());
@@ -45,7 +47,8 @@ app.get('/llave', (req, res) => {
   res.json({ llavePublica: llaves.publicKey });
 });
 
-app.post('/cifrar', requiereAuth, (req, res) => {
+//app.post('/cifrar', requiereAuth, (req, res) => {
+app.post('/cifrar', limiter, requiereAuth, (req, res) => {
   try {
     // [VULN-7] Sin validacion de entrada: no se controla tipo ni tamano.
     //   Un cuerpo enorme o de tipo inesperado puede tumbar el servicio.
@@ -60,7 +63,8 @@ app.post('/cifrar', requiereAuth, (req, res) => {
   }
 });
 
-app.post('/descifrar', requiereAuth, (req, res) => {
+//app.post('/descifrar', requiereAuth, (req, res) => {
+app.post('/descifrar', limiter, requiereAuth, (req, res) => {  
   try {
     const cifradoTxt = req.body.cifrado;
     const resultado = cifrado.descifrar(cifradoTxt, llaves.privateKey);
@@ -68,6 +72,7 @@ app.post('/descifrar', requiereAuth, (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message, stack: e.stack });
   }
+
 });
 
 // Demostracion de INYECCION SQL (CWE-89).
@@ -116,7 +121,8 @@ app.post('/calcular', (req, res) => {
 
 const { execFile } = require('child_process');
 
-app.get('/diagnostico', (req, res) => {
+//app.get('/diagnostico', (req, res) => {
+app.get('/diagnostico', limiter, (req, res) => {
   const host = req.query.host || '127.0.0.1';
   if (!/^[a-zA-Z0-9.-]{1,64}$/.test(host))
     return res.status(400).json({ error: 'Host invalido' });
