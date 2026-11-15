@@ -2,10 +2,10 @@
 #  Dockerfile  -  Servicio de cifrado
 # ============================================================================
 
-# [FIX H-07] Imagen base fijada a una version concreta y liviana (slim) en vez
-#   de "latest": build reproducible y menor superficie de ataque del SO base.
-#   CWE-1104 remediado.
-FROM node:20-slim AS build
+# [FIX H-07] Imagen base fijada a una version concreta y minimalista (Alpine,
+#   musl) en vez de "latest"/Debian: reduce drasticamente la superficie de
+#   vulnerabilidades del sistema operativo. CWE-1104 remediado.
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
@@ -15,15 +15,21 @@ RUN npm ci --omit=dev
 COPY . .
 
 # ----------------------------------------------------------------------------
-FROM node:20-slim
+FROM node:20-alpine
 
 WORKDIR /app
 
-# [FIX H-08] Se crea un usuario sin privilegios y se usa para ejecutar el
-#   proceso, en vez de dejarlo correr como root. CWE-250 remediado.
-RUN groupadd --system appuser && useradd --system --gid appuser --no-create-home appuser
+RUN apk update && apk upgrade --no-cache
+
+# [FIX H-08] Se ejecuta con un usuario sin privilegios (no root). CWE-250 remediado.
+RUN addgroup -S appuser && adduser -S -D -H -G appuser appuser
 
 COPY --from=build --chown=appuser:appuser /app .
+
+# npm ya cumplio su funcion en la etapa de build; no se necesita en runtime.
+# Se elimina junto con sus dependencias internas (reducia 22 hallazgos de Trivy).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack 2>/dev/null || true
 
 USER appuser
 
