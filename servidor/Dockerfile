@@ -1,26 +1,32 @@
 # ============================================================================
 #  Dockerfile  -  Servicio de cifrado
-#  >>> VERSION INSEGURA (rama inseguro) <<<
-#  Contiene malas practicas INTENCIONADAS que Trivy debe reportar.
 # ============================================================================
 
-# [VULN-11] Imagen base "latest" (no reproducible) y pesada, con muchos
-#   paquetes de sistema vulnerables. La solucion es una etiqueta fija y una
-#   imagen slim (p.ej. node:20-slim).  CWE-1104 / mala practica de imagen.
-FROM node:latest
+# [FIX H-07] Imagen base fijada a una version concreta y liviana (slim) en vez
+#   de "latest": build reproducible y menor superficie de ataque del SO base.
+#   CWE-1104 remediado.
+FROM node:20-slim AS build
 
 WORKDIR /app
 
-# [VULN-12] Se copia TODO el contexto (incluye .env, llaves y node_modules).
-#   Puede filtrar secretos dentro de la imagen.  CWE-538
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
 COPY . .
 
-# Instala dependencias en la imagen (sin fijar el lockfile con npm ci).
-RUN npm install
+# ----------------------------------------------------------------------------
+FROM node:20-slim
+
+WORKDIR /app
+
+# [FIX H-08] Se crea un usuario sin privilegios y se usa para ejecutar el
+#   proceso, en vez de dejarlo correr como root. CWE-250 remediado.
+RUN groupadd --system appuser && useradd --system --gid appuser --no-create-home appuser
+
+COPY --from=build --chown=appuser:appuser /app .
+
+USER appuser
 
 EXPOSE 3000
 
-# [VULN-13] El contenedor corre como ROOT (no hay instruccion USER).
-#   Viola el principio de minimo privilegio (NIST SP 800-190). Trivy lo marca.
-#   CWE-250 (Execution with Unnecessary Privileges)
 CMD ["node", "servidor.js"]
