@@ -15,11 +15,13 @@
 
 const express = require('express');
 const cors = require('cors');
-const { exec } = require('child_process');
+//const { exec } = require('child_process');
 const cifrado = require('./cifrado');
 const db = require('./db');
 const config = require('./config');
 const { requiereAuth } = require('./auth');
+const rateLimit = require('express-rate-limit');
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
 
 const app = express();
 app.use(express.json());
@@ -45,7 +47,8 @@ app.get('/llave', (req, res) => {
   res.json({ llavePublica: llaves.publicKey });
 });
 
-app.post('/cifrar', requiereAuth, (req, res) => {
+//app.post('/cifrar', requiereAuth, (req, res) => {
+app.post('/cifrar', limiter, requiereAuth, (req, res) => {
   try {
     // [VULN-7] Sin validacion de entrada: no se controla tipo ni tamano.
     //   Un cuerpo enorme o de tipo inesperado puede tumbar el servicio.
@@ -60,7 +63,8 @@ app.post('/cifrar', requiereAuth, (req, res) => {
   }
 });
 
-app.post('/descifrar', requiereAuth, (req, res) => {
+//app.post('/descifrar', requiereAuth, (req, res) => {
+app.post('/descifrar', limiter, requiereAuth, (req, res) => {  
   try {
     const cifradoTxt = req.body.cifrado;
     const resultado = cifrado.descifrar(cifradoTxt, llaves.privateKey);
@@ -68,6 +72,7 @@ app.post('/descifrar', requiereAuth, (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message, stack: e.stack });
   }
+
 });
 
 // Demostracion de INYECCION SQL (CWE-89).
@@ -81,26 +86,49 @@ app.get('/buscar', (req, res) => {
 // [VULN-9] Uso de eval() sobre entrada del usuario: inyeccion de codigo.
 //   Lo detectan Semgrep y CodeQL (js/code-injection).
 //   CWE-95 (Eval Injection)
+//app.post('/calcular', (req, res) => {
+//  const expresion = req.body.expresion || '0';
+//  try {
+//    const resultado = eval(expresion);
+//    res.json({ resultado });
+//  } catch (e) {
+//    res.status(400).json({ error: 'Expresion invalida' });
+//  }
+//});
+
+//const { evaluate } = require('mathjs');
+
+// [FIX H-03] Se elimina eval(): ya no se evalua una expresion como codigo,
+//   se recibe un arreglo de numeros validado y se suma. CWE-95 remediado.
 app.post('/calcular', (req, res) => {
-  const expresion = req.body.expresion || '0';
-  try {
-    const resultado = eval(expresion);
-    res.json({ resultado });
-  } catch (e) {
-    res.status(400).json({ error: 'Expresion invalida' });
-  }
+  const nums = Array.isArray(req.body.numeros) ? req.body.numeros : [];
+  if (!nums.every(n => typeof n === 'number'))
+    return res.status(400).json({ error: 'Entrada invalida' });
+  res.json({ resultado: nums.reduce((a, b) => a + b, 0) });
 });
+
 
 // [VULN-10] Inyeccion de comandos del sistema operativo.
 //   El parametro 'host' entra sin sanitizar a exec(). Un atacante puede enviar
 //   "8.8.8.8; cat /etc/passwd". Lo detectan CodeQL y Semgrep.
 //   CWE-78 (OS Command Injection)
-app.get('/diagnostico', (req, res) => {
+//app.get('/diagnostico', (req, res) => {
+//  const host = req.query.host || '127.0.0.1';
+//  exec('ping -c 1 ' + host, (err, stdout, stderr) => {
+//    res.json({ salida: stdout, error: stderr });
+//  });
+//});
+
+const { execFile } = require('child_process');
+
+//app.get('/diagnostico', (req, res) => {
+app.get('/diagnostico', limiter, (req, res) => {
   const host = req.query.host || '127.0.0.1';
-  exec('ping -c 1 ' + host, (err, stdout, stderr) => {
-    res.json({ salida: stdout, error: stderr });
-  });
+  if (!/^[a-zA-Z0-9.-]{1,64}$/.test(host))
+    return res.status(400).json({ error: 'Host invalido' });
+  execFile('ping', ['-c', '1', host], (e, out) => res.json({ salida: out }));
 });
+
 
 if (require.main === module) {
   app.listen(config.PUERTO, () => {

@@ -27,17 +27,34 @@ try {
 //   Lo detectan CodeQL (js/sql-injection) y Semgrep.
 //   La solucion son consultas parametrizadas (placeholders '?').
 //   CWE-89 (SQL Injection)
+//function buscarBitacora(nombre, callback) {
+//  const sql = "SELECT * FROM bitacora WHERE usuario = '" + nombre + "'";
+//  if (!conexion) {
+//    return callback(null, { sqlEjecutado: sql, filas: [] });
+//  }
+//  conexion.query(sql, function (err, filas) {
+//    if (err) {
+//      return callback(null, { sqlEjecutado: sql, filas: [], nota: err.code });
+//    }
+//    return callback(null, { sqlEjecutado: sql, filas: filas });
+//  });
+//}
+
+// [FIX H-05] Consulta parametrizada: el valor de 'nombre' viaja como
+//   parametro separado ('?'), nunca concatenado en el texto SQL.
+//   CWE-89 remediado.
 function buscarBitacora(nombre, callback) {
-  const sql = "SELECT * FROM bitacora WHERE usuario = '" + nombre + "'";
+  const sql = 'SELECT * FROM bitacora WHERE usuario = ?';
   if (!conexion) {
-    return callback(null, { sqlEjecutado: sql, filas: [] });
+    return callback(null, { filas: [] });
   }
-  conexion.query(sql, function (err, filas) {
+  conexion.query(sql, [nombre], function (err, filas) {
     if (err) {
-      return callback(null, { sqlEjecutado: sql, filas: [], nota: err.code });
+      return callback(null, { filas: [], nota: err.code });
     }
-    return callback(null, { sqlEjecutado: sql, filas: filas });
+    return callback(null, { filas: filas });
   });
 }
+
 
 module.exports = { buscarBitacora };
