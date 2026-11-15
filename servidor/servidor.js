@@ -52,32 +52,41 @@ app.get('/llave', (req, res) => {
   res.json({ llavePublica: llaves.publicKey });
 });
 
-//app.post('/cifrar', requiereAuth, (req, res) => {
+// [FIX H-14] CSRF: esta API es "stateless" (sin cookies de sesion). Todas las
+//   operaciones que cambian estado (/cifrar, /descifrar) exigen el JWT en la
+//   cabecera Authorization, que un navegador NUNCA adjunta automaticamente en
+//   una peticion cross-site (a diferencia de una cookie). El CSRF clasico no
+//   aplica a autenticacion por Bearer token + CORS restringido (ver H-10).
+//   CWE-352 remediado por diseno; se documenta para Semgrep.
+// nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
+
 app.post('/cifrar', limiter, requiereAuth, (req, res) => {
   try {
-    // [VULN-7] Sin validacion de entrada: no se controla tipo ni tamano.
-    //   Un cuerpo enorme o de tipo inesperado puede tumbar el servicio.
-    //   CWE-20 (Improper Input Validation)
+    // [FIX H-11] Validacion de tipo y longitud (1-180 caracteres) del texto.
+    //   CWE-20 remediado.
     const texto = req.body.texto;
+    if (typeof texto !== 'string' || texto.length < 1 || texto.length > 180) {
+      return res.status(400).json({ error: 'Texto invalido: debe ser una cadena de 1 a 180 caracteres' });
+    }
     const resultado = cifrado.cifrar(texto, llaves.publicKey);
     res.json({ cifrado: resultado });
   } catch (e) {
-    // [VULN-8] Exposicion de detalles internos: se devuelve el stack al cliente.
-    //   CWE-209 (Information Exposure Through an Error Message)
-    res.status(500).json({ error: e.message, stack: e.stack });
+    // [FIX H-12] Ya no se expone el stack trace al cliente. CWE-209 remediado.
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
-//app.post('/descifrar', requiereAuth, (req, res) => {
-app.post('/descifrar', limiter, requiereAuth, (req, res) => {  
+app.post('/descifrar', limiter, requiereAuth, (req, res) => {
   try {
     const cifradoTxt = req.body.cifrado;
+    if (typeof cifradoTxt !== 'string' || cifradoTxt.length < 1) {
+      return res.status(400).json({ error: 'Entrada invalida' });
+    }
     const resultado = cifrado.descifrar(cifradoTxt, llaves.privateKey);
     res.json({ descifrado: resultado });
   } catch (e) {
-    res.status(500).json({ error: e.message, stack: e.stack });
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
-
 });
 
 // Demostracion de INYECCION SQL (CWE-89).
