@@ -22,8 +22,14 @@ const config = {
   // Control de acceso DESACTIVADO por defecto (mal)
   AUTH_ENABLED: process.env.AUTH_ENABLED === 'true' ? true : false,
 
-  // Parametros de Keycloak (IAM)
+   // Parametros de Keycloak (IAM)
+  // KEYCLOAK_URL: direccion interna de Docker, usada para ir a buscar las
+  //   llaves publicas (JWKS) de Keycloak.
   KEYCLOAK_URL: process.env.KEYCLOAK_URL || 'http://localhost:8080',
+  // [FIX H-06] KEYCLOAK_ISSUER_URL: direccion publica con la que Keycloak firma
+  //   el campo "iss" del token (puede diferir de KEYCLOAK_URL detras de un
+  //   proxy/Codespace); se usa solo para validar ese campo.
+  KEYCLOAK_ISSUER_URL: process.env.KEYCLOAK_ISSUER_URL || process.env.KEYCLOAK_URL || 'http://localhost:8080',
   KEYCLOAK_REALM: process.env.KEYCLOAK_REALM || 'appmovil',
 
   PUERTO: process.env.PORT || 3000,
