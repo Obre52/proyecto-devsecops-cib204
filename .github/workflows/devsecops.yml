@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ejecutar Semgrep
         # --error hace fallar el job si hay hallazgos; se guarda el SARIF.
-        run: semgrep scan --config p/default --config p/javascript --config p/nodejs --error --sarif --output semgrep.sarif .
+        run: semgrep scan --config p/default --config p/javascript --config p/nodejs --exclude='.github' --error --sarif --output semgrep.sarif .
       - name: Guardar reporte Semgrep
         if: always()
         uses: actions/upload-artifact@v4

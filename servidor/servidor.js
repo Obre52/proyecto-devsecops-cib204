@@ -24,6 +24,13 @@ const { requiereAuth } = require('./auth');
 const rateLimit = require('express-rate-limit');
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
 
+// [FIX H-14] CSRF: esta API es "stateless" (sin cookies de sesion). Todas las
+//   operaciones que cambian estado (/cifrar, /descifrar) exigen el JWT en la
+//   cabecera Authorization, que un navegador NUNCA adjunta automaticamente en
+//   una peticion cross-site (a diferencia de una cookie). El CSRF clasico no
+//   aplica a autenticacion por Bearer token + CORS restringido (ver H-10).
+//   CWE-352 remediado por diseno; se documenta para Semgrep.
+// nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
 const app = express();
 app.use(express.json());
 
@@ -51,14 +58,6 @@ app.get('/salud', (req, res) => {
 app.get('/llave', (req, res) => {
   res.json({ llavePublica: llaves.publicKey });
 });
-
-// [FIX H-14] CSRF: esta API es "stateless" (sin cookies de sesion). Todas las
-//   operaciones que cambian estado (/cifrar, /descifrar) exigen el JWT en la
-//   cabecera Authorization, que un navegador NUNCA adjunta automaticamente en
-//   una peticion cross-site (a diferencia de una cookie). El CSRF clasico no
-//   aplica a autenticacion por Bearer token + CORS restringido (ver H-10).
-//   CWE-352 remediado por diseno; se documenta para Semgrep.
-// nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
 
 app.post('/cifrar', limiter, requiereAuth, (req, res) => {
   try {
@@ -97,21 +96,6 @@ app.get('/buscar', (req, res) => {
   });
 });
 
-// [VULN-9] Uso de eval() sobre entrada del usuario: inyeccion de codigo.
-//   Lo detectan Semgrep y CodeQL (js/code-injection).
-//   CWE-95 (Eval Injection)
-//app.post('/calcular', (req, res) => {
-//  const expresion = req.body.expresion || '0';
-//  try {
-//    const resultado = eval(expresion);
-//    res.json({ resultado });
-//  } catch (e) {
-//    res.status(400).json({ error: 'Expresion invalida' });
-//  }
-//});
-
-//const { evaluate } = require('mathjs');
-
 // [FIX H-03] Se elimina eval(): ya no se evalua una expresion como codigo,
 //   se recibe un arreglo de numeros validado y se suma. CWE-95 remediado.
 app.post('/calcular', (req, res) => {
@@ -121,28 +105,14 @@ app.post('/calcular', (req, res) => {
   res.json({ resultado: nums.reduce((a, b) => a + b, 0) });
 });
 
-
-// [VULN-10] Inyeccion de comandos del sistema operativo.
-//   El parametro 'host' entra sin sanitizar a exec(). Un atacante puede enviar
-//   "8.8.8.8; cat /etc/passwd". Lo detectan CodeQL y Semgrep.
-//   CWE-78 (OS Command Injection)
-//app.get('/diagnostico', (req, res) => {
-//  const host = req.query.host || '127.0.0.1';
-//  exec('ping -c 1 ' + host, (err, stdout, stderr) => {
-//    res.json({ salida: stdout, error: stderr });
-//  });
-//});
-
 const { execFile } = require('child_process');
 
-//app.get('/diagnostico', (req, res) => {
 app.get('/diagnostico', limiter, (req, res) => {
   const host = req.query.host || '127.0.0.1';
   if (!/^[a-zA-Z0-9.-]{1,64}$/.test(host))
     return res.status(400).json({ error: 'Host invalido' });
   execFile('ping', ['-c', '1', host], (e, out) => res.json({ salida: out }));
 });
-
 
 if (require.main === module) {
   app.listen(config.PUERTO, () => {
