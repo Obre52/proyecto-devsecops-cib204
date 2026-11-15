@@ -15,6 +15,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 //const { exec } = require('child_process');
 const cifrado = require('./cifrado');
 const db = require('./db');
@@ -26,15 +27,19 @@ const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders:
 const app = express();
 app.use(express.json());
 
-// [VULN-5] CORS totalmente abierto: cualquier origen puede consumir la API.
-//   Lo reporta OWASP ZAP (DAST) y Semgrep. La solucion es restringir a los
-//   origenes de confianza.  CWE-942 (Overly Permissive CORS)
-app.use(cors());
+// [FIX H-10] CORS restringido a un origen de confianza en vez de aceptar
+//   cualquiera ("*"). CWE-942 remediado.
+app.use(cors({ origin: config.ORIGEN_PERMITIDO }));
 
-// [VULN-6] Faltan cabeceras de seguridad (no se usa Helmet):
-//   sin Content-Security-Policy, X-Content-Type-Options, etc.
-//   Lo reporta OWASP ZAP.  CWE-693 (Protection Mechanism Failure)
-//   (La solucion es: app.use(require('helmet')()).)
+// [FIX H-09] Cabeceras de seguridad con Helmet: incluye por defecto
+//   Content-Security-Policy con frame-ancestors y form-action (antes
+//   ausentes), X-Content-Type-Options, etc. Se agrega ademas Permissions-Policy
+//   explicito, que Helmet ya no establece por defecto. CWE-693 remediado.
+app.use(helmet());
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
+  next();
+});
 
 // El servicio genera su par de llaves al arrancar.
 const llaves = cifrado.generarLlaves();
